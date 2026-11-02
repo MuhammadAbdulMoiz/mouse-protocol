@@ -2,8 +2,12 @@ import type { MouseStatus } from "../mouse-types.ts";
 import {
   AULA_CMD_IDENTIFY,
   AULA_CMD_LINK_EVENT,
+  AULA_BUTTON_ACTIONS,
+  AULA_BUTTON_NAMES,
+  AULA_CMD_READ_BUTTONS,
   AULA_CMD_READ_DPI,
   AULA_CMD_READ_RATE,
+  AULA_CMD_WRITE_BUTTON,
   AULA_CMD_WRITE_DPI,
   AULA_CMD_WRITE_RATE,
   AULA_POLLING_RATES,
@@ -15,9 +19,11 @@ import {
   AULA_STATUS_BUSY,
   AULA_STATUS_OK,
   aulaBuildFrame,
+  aulaDecodeButtonMap,
   aulaDecodeDpiTable,
   aulaDecodeIdentify,
   aulaDecodePollingRate,
+  aulaEncodeButtonWrite,
   aulaEncodeDpiWrite,
   aulaEncodePollingRate,
   aulaGetDpiOptions,
@@ -84,6 +90,7 @@ export class AulaSc580HidClient {
   async readStatus(): Promise<MouseStatus> {
     const identity = aulaDecodeIdentify(await this.exchange(AULA_CMD_IDENTIFY, []));
     const { stages } = await this.readTable();
+    const buttonMappings = await this.readButtons();
     const pollingRateHz = await this.readPollingRate();
     // dpi 0 means unknown (the active stage is not readable); so does pollingRateHz 0.
     return {
@@ -99,6 +106,9 @@ export class AulaSc580HidClient {
       liftOffDistance: null,
       firmware: [],
       dpiStages: stages,
+      buttonMappings,
+      buttonOptions: AULA_BUTTON_ACTIONS.map((a) => a.label),
+      fixedButtons: ["Left"],
       ui: { dpiStageEditor: { maxStages: AULA_STAGE_COUNT, countEditable: false, minDpi: 50, maxDpi: 12000, stepDpi: 50 } },
     };
   }
@@ -115,6 +125,19 @@ export class AulaSc580HidClient {
     return confirmed;
   }
 
+  /** Writes one slot, requires the echo, then re-reads the map to confirm. Left stays fixed. */
+  async setButtonMapping(button: string, label: string): Promise<void> {
+    const slot = (AULA_BUTTON_NAMES as readonly string[]).indexOf(button);
+    if (slot < 0) throw new Error(`${button} is not a button on the AULA SC580.`);
+    if (button === "Left") throw new Error("The AULA SC580 left button cannot be remapped.");
+    let data: Uint8Array;
+    try { data = aulaEncodeButtonWrite(slot, label); } catch { throw new Error(`${label} is not supported by the AULA SC580.`); }
+    const echo = await this.exchange(AULA_CMD_WRITE_BUTTON, data);
+    if (echo.length !== data.length || data.some((byte, i) => byte !== echo[i])) throw new Error("AULA SC580 did not echo the button write.");
+    const confirmed = (await this.readButtons())[button];
+    if (confirmed !== label) throw new Error(`AULA SC580 kept ${confirmed} instead of ${label} on ${button}.`);
+  }
+
   /** Writes the rate bit and returns the rate read back. */
   async setPollingRate(rate: number): Promise<number> {
     let bits: number;
@@ -128,6 +151,11 @@ export class AulaSc580HidClient {
   private async readPollingRate(): Promise<number> {
     const [bits] = await this.exchange(AULA_CMD_READ_RATE, []);
     return aulaDecodePollingRate(bits ?? 0);
+  }
+
+  private async readButtons(): Promise<Record<string, string>> {
+    const labels = aulaDecodeButtonMap(await this.exchange(AULA_CMD_READ_BUTTONS, []));
+    return Object.fromEntries(AULA_BUTTON_NAMES.map((name, i) => [name, labels[i]!]));
   }
 
   private async readTable(): Promise<{ header: number; stages: number[] }> {

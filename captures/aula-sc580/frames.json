@@ -58,6 +58,30 @@
       "payload": "02 00 01 01 08 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 08"
     },
     {
+      "name": "button-map-read-request",
+      "dir": "host-to-device",
+      "note": "Command 0x11, no data.",
+      "payload": "11 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+    },
+    {
+      "name": "button-map-read-reply-factory",
+      "dir": "device-to-host",
+      "note": "Factory map read after reset: 6 slots x 3 bytes (Left, Right, Middle, Back, Forward, DPI).",
+      "payload": "11 00 01 12 20 01 00 20 02 00 20 04 00 20 08 00 20 10 00 50 01 00 00 00 00 00 00 00 00 00 00 10"
+    },
+    {
+      "name": "button-write-back-to-slot-4",
+      "dir": "host-to-device",
+      "note": "Command 0x01, vendor app write: slot 4 (Forward) set to Back (20 08 00). The device echoes the frame.",
+      "payload": "01 00 01 04 04 20 08 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 2c"
+    },
+    {
+      "name": "button-write-volume-up-to-slot-1",
+      "dir": "host-to-device",
+      "note": "Command 0x01, vendor app write: slot 1 (Right) set to Volume up (90 e9 00). The device echoes the frame.",
+      "payload": "01 00 01 04 01 90 e9 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 7a"
+    },
+    {
       "name": "asleep-echo",
       "dir": "device-to-host",
       "note": "Status 2: the mouse is asleep and the receiver echoes the request; retry later.",

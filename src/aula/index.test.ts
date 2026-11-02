@@ -3,12 +3,16 @@ import test from "node:test";
 
 import {
   AULA_DPI_OPTIONS,
+  AULA_BUTTON_ACTIONS,
+  AULA_BUTTON_NAMES,
   AULA_PRODUCTS,
   aulaBuildFrame,
+  aulaDecodeButtonMap,
   aulaDecodeDpiTable,
   aulaDecodeIdentify,
   aulaDecodePollingRate,
   aulaDpiFromRaw,
+  aulaEncodeButtonWrite,
   aulaEncodeDpiWrite,
   aulaEncodePollingRate,
   aulaParseReply,
@@ -129,4 +133,47 @@ test("polling bits map to rates and back", () => {
   }
   for (const rate of [0, 2000, 8000, 100]) assert.throws(() => aulaEncodePollingRate(rate), RangeError);
   for (const bits of [0, 3, 5, 16, 255]) assert.equal(aulaDecodePollingRate(bits), 0);
+});
+
+const FACTORY_MAP = hex("20 01 00 20 02 00 20 04 00 20 08 00 20 10 00 50 01 00");
+
+test("button writes match the vendor captures byte for byte", () => {
+  for (const [slot, label, frame] of [
+    [4, "Back", "01 00 01 04 04 20 08 00"],
+    [1, "Volume up", "01 00 01 04 01 90 e9 00"],
+    [3, "Copy", "01 00 01 04 03 80 01 06"],
+  ] as const) {
+    const expected = pad(frame);
+    expected[31] = { Back: 0x2c, "Volume up": 0x7a, Copy: 0x8a }[label];
+    assert.deepEqual(aulaBuildFrame(0x01, aulaEncodeButtonWrite(slot, label)), expected);
+  }
+});
+
+test("the factory button map decodes to the stock actions", () => {
+  assert.deepEqual(aulaDecodeButtonMap(FACTORY_MAP), ["Left click", "Right click", "Middle click", "Back", "Forward", "DPI cycle"]);
+  assert.deepEqual(AULA_BUTTON_NAMES, ["Left", "Right", "Middle", "Back", "Forward", "DPI"]);
+  assert.equal(AULA_BUTTON_ACTIONS.length, 18);
+});
+
+test("every table action round trips through a slot", () => {
+  for (const { label } of AULA_BUTTON_ACTIONS) {
+    const data = aulaEncodeButtonWrite(5, label);
+    assert.equal(data.length, 4);
+    const map = FACTORY_MAP.slice();
+    map.set(data.slice(1), 15);
+    assert.equal(aulaDecodeButtonMap(map)[5], label);
+  }
+});
+
+test("codes outside the table decode as Custom and button map decode is strict", () => {
+  const map = FACTORY_MAP.slice();
+  map.set([0x50, 0x02, 0x00], 15);
+  map.set([0x40, 0x32, 0x03], 0);
+  assert.deepEqual([aulaDecodeButtonMap(map)[5], aulaDecodeButtonMap(map)[0]], ["Custom (50 02 00)", "Custom (40 32 03)"]);
+  for (const length of [0, 17, 19]) assert.throws(() => aulaDecodeButtonMap(new Uint8Array(length)), RangeError);
+});
+
+test("button write rejects bad slots and unknown labels", () => {
+  for (const slot of [-1, 6, 1.5, NaN]) assert.throws(() => aulaEncodeButtonWrite(slot, "Back"), RangeError);
+  for (const label of ["Custom (50 02 00)", "back", ""]) assert.throws(() => aulaEncodeButtonWrite(1, label), RangeError);
 });

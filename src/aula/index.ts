@@ -16,6 +16,8 @@ export const AULA_CMD_READ_DPI = 0x13;
 export const AULA_CMD_WRITE_DPI = 0x03;
 export const AULA_CMD_READ_RATE = 0x12;
 export const AULA_CMD_WRITE_RATE = 0x02;
+export const AULA_CMD_READ_BUTTONS = 0x11;
+export const AULA_CMD_WRITE_BUTTON = 0x01;
 /** Unsolicited link event; not part of any exchange. */
 export const AULA_CMD_LINK_EVENT = 0xd1;
 
@@ -44,6 +46,34 @@ export const AULA_POLLING_RATES: readonly number[] = [125, 250, 500, 1000];
 export const AULA_DPI_OPTIONS: readonly number[] = [
   ...Array.from({ length: 200 }, (_, i) => (i + 1) * 50),
   ...Array.from({ length: 20 }, (_, i) => 10100 + i * 100),
+];
+
+/** Slot order of the 0x11 button map: 6 slots x 3 bytes. */
+export const AULA_BUTTON_NAMES = ["Left", "Right", "Middle", "Back", "Forward", "DPI"] as const;
+
+/**
+ * The selectable actions, label to 3-byte code. First byte is the family: 0x20 mouse button bitmask,
+ * 0x50 DPI cycle, 0x70 disabled, 0x80 keyboard key (modifier mask, HID usage), 0x90 HID consumer usage.
+ */
+export const AULA_BUTTON_ACTIONS: readonly { readonly label: string; readonly code: readonly [number, number, number] }[] = [
+  { label: "Left click", code: [0x20, 0x01, 0x00] },
+  { label: "Right click", code: [0x20, 0x02, 0x00] },
+  { label: "Middle click", code: [0x20, 0x04, 0x00] },
+  { label: "Back", code: [0x20, 0x08, 0x00] },
+  { label: "Forward", code: [0x20, 0x10, 0x00] },
+  { label: "DPI cycle", code: [0x50, 0x01, 0x00] },
+  { label: "Disabled", code: [0x70, 0x00, 0x00] },
+  { label: "Cut", code: [0x80, 0x01, 0x1b] },
+  { label: "Copy", code: [0x80, 0x01, 0x06] },
+  { label: "Paste", code: [0x80, 0x01, 0x19] },
+  { label: "Play / pause", code: [0x90, 0xcd, 0x00] },
+  { label: "Stop", code: [0x90, 0xb7, 0x00] },
+  { label: "Volume up", code: [0x90, 0xe9, 0x00] },
+  { label: "Volume down", code: [0x90, 0xea, 0x00] },
+  { label: "Mute", code: [0x90, 0xe2, 0x00] },
+  { label: "Mail", code: [0x90, 0x8a, 0x01] },
+  { label: "My computer", code: [0x90, 0x94, 0x01] },
+  { label: "Browser home", code: [0x90, 0x23, 0x02] },
 ];
 
 const MAX_RAW = 220;
@@ -138,6 +168,24 @@ export function aulaEncodePollingRate(rate: number): number {
 export function aulaDecodePollingRate(bits: number): number {
   const index = [1, 2, 4, 8].indexOf(bits);
   return index < 0 ? 0 : AULA_POLLING_RATES[index]!;
+}
+
+/** One label per slot, in `AULA_BUTTON_NAMES` order; a code outside the table reads as `Custom (xx xx xx)`. */
+export function aulaDecodeButtonMap(data: Uint8Array): string[] {
+  if (data.length !== AULA_BUTTON_NAMES.length * 3) throw new RangeError(`AULA button map must be ${AULA_BUTTON_NAMES.length * 3} bytes.`);
+  return AULA_BUTTON_NAMES.map((_, slot) => {
+    const code = data.slice(slot * 3, slot * 3 + 3);
+    const known = AULA_BUTTON_ACTIONS.find((a) => a.code.every((byte, i) => byte === code[i]));
+    return known?.label ?? `Custom (${Array.from(code, (byte) => byte.toString(16).padStart(2, "0")).join(" ")})`;
+  });
+}
+
+/** The 4 data bytes of a single-slot write: slot, then the action's 3-byte code. */
+export function aulaEncodeButtonWrite(slot: number, label: string): Uint8Array {
+  if (!Number.isInteger(slot) || slot < 0 || slot >= AULA_BUTTON_NAMES.length) throw new RangeError(`AULA button slot must be 0..${AULA_BUTTON_NAMES.length - 1}.`);
+  const action = AULA_BUTTON_ACTIONS.find((a) => a.label === label);
+  if (!action) throw new RangeError(`AULA button action "${label}" is not supported.`);
+  return Uint8Array.of(slot, ...action.code);
 }
 
 export function aulaGetDpiOptions(): number[] {
