@@ -170,22 +170,84 @@ export function aulaDecodePollingRate(bits: number): number {
   return index < 0 ? 0 : AULA_POLLING_RATES[index]!;
 }
 
-/** One label per slot, in `AULA_BUTTON_NAMES` order; a code outside the table reads as `Custom (xx xx xx)`. */
-export function aulaDecodeButtonMap(data: Uint8Array): string[] {
-  if (data.length !== AULA_BUTTON_NAMES.length * 3) throw new RangeError(`AULA button map must be ${AULA_BUTTON_NAMES.length * 3} bytes.`);
-  return AULA_BUTTON_NAMES.map((_, slot) => {
-    const code = data.slice(slot * 3, slot * 3 + 3);
-    const known = AULA_BUTTON_ACTIONS.find((a) => a.code.every((byte, i) => byte === code[i]));
-    return known?.label ?? `Custom (${Array.from(code, (byte) => byte.toString(16).padStart(2, "0")).join(" ")})`;
-  });
+/** Option that restores a slot's factory action; never a decoded label. */
+export const AULA_DEFAULT_OPTION = "Default";
+
+/** Factory action per button (read after a vendor reset). */
+export const AULA_BUTTON_DEFAULTS: Readonly<Record<(typeof AULA_BUTTON_NAMES)[number], string>> = {
+  Left: "Left click",
+  Right: "Right click",
+  Middle: "Middle click",
+  Back: "Back",
+  Forward: "Forward",
+  DPI: "DPI cycle",
+};
+
+/** Only these modifier bits are exposed; Alt and Win were not tested. Label order is this order. */
+export const AULA_SHORTCUT_MODIFIERS: readonly { readonly name: string; readonly bit: number }[] = [
+  { name: "Ctrl", bit: 0x01 },
+  { name: "Shift", bit: 0x02 },
+];
+
+/** Standard HID keyboard usages offered for shortcuts, in display order. */
+export const AULA_SHORTCUT_KEYS: readonly { readonly name: string; readonly usage: number }[] = [
+  ...Array.from({ length: 26 }, (_, i) => ({ name: String.fromCharCode(65 + i), usage: 0x04 + i })),
+  ...[..."1234567890"].map((name, i) => ({ name, usage: 0x1e + i })),
+  { name: "Enter", usage: 0x28 }, { name: "Escape", usage: 0x29 }, { name: "Backspace", usage: 0x2a },
+  { name: "Tab", usage: 0x2b }, { name: "Space", usage: 0x2c },
+  ...Array.from({ length: 12 }, (_, i) => ({ name: `F${i + 1}`, usage: 0x3a + i })),
+  { name: "Insert", usage: 0x49 }, { name: "Home", usage: 0x4a }, { name: "Page up", usage: 0x4b },
+  { name: "Delete", usage: 0x4c }, { name: "End", usage: 0x4d }, { name: "Page down", usage: 0x4e },
+  { name: "Right arrow", usage: 0x4f }, { name: "Left arrow", usage: 0x50 },
+  { name: "Down arrow", usage: 0x51 }, { name: "Up arrow", usage: 0x52 },
+];
+
+/** `Ctrl+Shift+A`, `Shift+F5` or `A`: modifiers in fixed order, then the key. Null for anything else. */
+function shortcutLabel(mask: number, usage: number): string | null {
+  const key = AULA_SHORTCUT_KEYS.find((k) => k.usage === usage);
+  const allowed = AULA_SHORTCUT_MODIFIERS.reduce((all, m) => all | m.bit, 0);
+  if (!key || (mask & ~allowed) !== 0) return null;
+  return [...AULA_SHORTCUT_MODIFIERS.filter((m) => mask & m.bit).map((m) => m.name), key.name].join("+");
 }
 
-/** The 4 data bytes of a single-slot write: slot, then the action's 3-byte code. */
+/** Strict: known modifiers once each, then exactly one known key. Returns the 3-byte code. */
+function parseShortcut(label: string): [number, number, number] {
+  const parts = label.split("+");
+  const last = parts.pop();
+  const key = AULA_SHORTCUT_KEYS.find((k) => k.name === last);
+  if (!key) throw new RangeError(`AULA button action "${label}" is not supported.`);
+  let mask = 0;
+  for (const part of parts) {
+    const modifier = AULA_SHORTCUT_MODIFIERS.find((m) => m.name === part);
+    if (!modifier || mask & modifier.bit) throw new RangeError(`AULA button action "${label}" is not supported.`);
+    mask |= modifier.bit;
+  }
+  return [0x80, mask, key.usage];
+}
+
+/** Label for one 3-byte code: the action table first, then a shortcut, else `Custom (xx xx xx)`. */
+export function aulaDecodeButtonCode(code: ArrayLike<number>): string {
+  const known = AULA_BUTTON_ACTIONS.find((a) => a.code.every((byte, i) => byte === code[i]));
+  if (known) return known.label;
+  const shortcut = code[0] === 0x80 ? shortcutLabel(code[1]!, code[2]!) : null;
+  return shortcut ?? `Custom (${Array.from({ length: 3 }, (_, i) => code[i]!.toString(16).padStart(2, "0")).join(" ")})`;
+}
+
+/** One label per slot, in `AULA_BUTTON_NAMES` order; an unknown code reads as `Custom (xx xx xx)`. */
+export function aulaDecodeButtonMap(data: Uint8Array): string[] {
+  if (data.length !== AULA_BUTTON_NAMES.length * 3) throw new RangeError(`AULA button map must be ${AULA_BUTTON_NAMES.length * 3} bytes.`);
+  return AULA_BUTTON_NAMES.map((_, slot) => aulaDecodeButtonCode(data.slice(slot * 3, slot * 3 + 3)));
+}
+
+/**
+ * The 4 data bytes of a single-slot write: slot, then the 3-byte code of a table action, a shortcut
+ * label, or `Default` (the slot's factory action).
+ */
 export function aulaEncodeButtonWrite(slot: number, label: string): Uint8Array {
   if (!Number.isInteger(slot) || slot < 0 || slot >= AULA_BUTTON_NAMES.length) throw new RangeError(`AULA button slot must be 0..${AULA_BUTTON_NAMES.length - 1}.`);
-  const action = AULA_BUTTON_ACTIONS.find((a) => a.label === label);
-  if (!action) throw new RangeError(`AULA button action "${label}" is not supported.`);
-  return Uint8Array.of(slot, ...action.code);
+  const name = label === AULA_DEFAULT_OPTION ? AULA_BUTTON_DEFAULTS[AULA_BUTTON_NAMES[slot]!] : label;
+  const action = AULA_BUTTON_ACTIONS.find((a) => a.label === name);
+  return Uint8Array.of(slot, ...(action ? action.code : parseShortcut(name)));
 }
 
 export function aulaGetDpiOptions(): number[] {

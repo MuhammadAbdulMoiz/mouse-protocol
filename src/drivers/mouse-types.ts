@@ -316,6 +316,12 @@ export interface MouseStatus {
   buttonOptions?: string[];
   /** Button names the device reported in an unknown or macro encoding. */
   fixedButtons?: string[];
+  /** Factory action label per button; `setButtonMapping(button, "Default")` restores it. */
+  buttonDefaults?: Record<string, string>;
+  /** Key names a custom keyboard shortcut can use, in display order. Absent when unsupported. */
+  shortcutKeys?: string[];
+  /** Modifier names a shortcut can combine with a key, in label order. */
+  shortcutModifiers?: string[];
   deviceMode?: "Onboard" | "Host" | "Unknown";
   unitId?: string | null;
   modelId?: string | null;

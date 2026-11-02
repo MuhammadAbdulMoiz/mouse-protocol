@@ -4,8 +4,11 @@ import test from "node:test";
 import {
   AULA_DPI_OPTIONS,
   AULA_BUTTON_ACTIONS,
+  AULA_BUTTON_DEFAULTS,
   AULA_BUTTON_NAMES,
   AULA_PRODUCTS,
+  AULA_SHORTCUT_KEYS,
+  AULA_SHORTCUT_MODIFIERS,
   aulaBuildFrame,
   aulaDecodeButtonMap,
   aulaDecodeDpiTable,
@@ -176,4 +179,60 @@ test("codes outside the table decode as Custom and button map decode is strict",
 test("button write rejects bad slots and unknown labels", () => {
   for (const slot of [-1, 6, 1.5, NaN]) assert.throws(() => aulaEncodeButtonWrite(slot, "Back"), RangeError);
   for (const label of ["Custom (50 02 00)", "back", ""]) assert.throws(() => aulaEncodeButtonWrite(1, label), RangeError);
+});
+
+const SHORTCUT_KEY_COUNT = AULA_SHORTCUT_KEYS.length;
+
+test("Default writes each slot's factory code", () => {
+  AULA_BUTTON_NAMES.forEach((name, slot) => {
+    assert.deepEqual(aulaEncodeButtonWrite(slot, "Default"), Uint8Array.of(slot, ...FACTORY_MAP.slice(slot * 3, slot * 3 + 3)));
+    assert.equal(AULA_BUTTON_DEFAULTS[name], aulaDecodeButtonMap(FACTORY_MAP)[slot]);
+  });
+});
+
+test("shortcut table covers the requested keys", () => {
+  assert.equal(SHORTCUT_KEY_COUNT, 26 + 10 + 5 + 12 + 10);
+  assert.deepEqual(AULA_SHORTCUT_MODIFIERS.map((m) => m.name), ["Ctrl", "Shift"]);
+  assert.equal(AULA_SHORTCUT_KEYS.find((k) => k.name === "Up arrow")?.usage, 0x52);
+});
+
+test("shortcuts round trip across the key table", () => {
+  for (const { name, usage } of AULA_SHORTCUT_KEYS) {
+    for (const [prefix, mask] of [["", 0], ["Ctrl+", 1], ["Shift+", 2], ["Ctrl+Shift+", 3]] as const) {
+      const label = prefix + name;
+      const data = aulaEncodeButtonWrite(3, label);
+      assert.deepEqual([...data], [3, 0x80, mask, usage]);
+      const map = FACTORY_MAP.slice();
+      map.set(data.slice(1), 9);
+      const decoded = aulaDecodeButtonMap(map)[3];
+      // Ctrl+X, Ctrl+C and Ctrl+V are table actions and win.
+      assert.equal(decoded, { "Ctrl+X": "Cut", "Ctrl+C": "Copy", "Ctrl+V": "Paste" }[label] ?? label);
+    }
+  }
+});
+
+test("shortcut parsing is strict and accepts any modifier order", () => {
+  assert.deepEqual([...aulaEncodeButtonWrite(3, "Shift+Ctrl+A")], [3, 0x80, 3, 4]);
+  for (const label of ["Alt+A", "Ctrl+Ctrl+A", "A+Ctrl", "Ctrl+", "Ctrl", "Shift+", "A+B", "Ctrl+Nope", "ctrl+a", "Ctrl+a", "+A", "Ctrl++A"]) {
+    assert.throws(() => aulaEncodeButtonWrite(3, label), RangeError, label);
+  }
+});
+
+test("other modifier bits and unknown usages decode as Custom", () => {
+  const map = FACTORY_MAP.slice();
+  map.set([0x80, 0x04, 0x04], 3);
+  map.set([0x80, 0x01, 0x00], 6);
+  map.set([0x80, 0x03, 0x65], 9);
+  assert.deepEqual(aulaDecodeButtonMap(map).slice(1, 4), ["Custom (80 04 04)", "Custom (80 01 00)", "Custom (80 03 65)"]);
+});
+
+test("captured shortcut frames match byte for byte", () => {
+  for (const [slot, label, frame, sum] of [
+    [3, "A", "01 00 01 04 03 80 00 04", 0x87],
+    [4, "Shift+A", "01 00 01 04 04 80 02 04", 0x8a],
+  ] as const) {
+    const expected = pad(frame);
+    expected[31] = sum;
+    assert.deepEqual(aulaBuildFrame(0x01, aulaEncodeButtonWrite(slot, label)), expected);
+  }
 });

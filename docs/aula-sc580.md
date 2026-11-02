@@ -61,12 +61,38 @@ Stop `90 b7 00`, Volume up `90 e9 00`, Volume down `90 ea 00`, Mute `90 e2 00`, 
 My computer `90 94 01`, Browser home `90 23 02`. Any other code reads as `Custom (xx xx xx)`, is
 never offered, and is only replaced when the user picks a new action for that slot.
 
+### Default
+
+`Default` is an extra option in `buttonOptions`, not a code. `setButtonMapping(button, "Default")`
+writes that slot's factory code (Left `20 01 00`, Right `20 02 00`, Middle `20 04 00`, Back
+`20 08 00`, Forward `20 10 00`, DPI `50 01 00`) and confirms by read-back. `MouseStatus.buttonDefaults`
+maps each button to its factory label. A decoded map never shows `Default`; it shows the actual action.
+
+### Keyboard shortcuts
+
+`80 mm kk` is a keyboard action: `mm` the modifier mask, `kk` the HID keyboard usage. Only Ctrl
+(`01`) and Shift (`02`) are exposed, with these keys: A-Z (`04`-`1d`), 1-9 and 0 (`1e`-`27`), Enter
+`28`, Escape `29`, Backspace `2a`, Tab `2b`, Space `2c`, F1-F12 (`3a`-`45`), Insert `49`, Home `4a`, Page up
+`4b`, Delete `4c`, End `4d`, Page down `4e`, Right/Left/Down/Up arrow `4f`-`52`. `MouseStatus.shortcutKeys`
+and `shortcutModifiers` list them.
+
+Label format: modifiers in fixed order (`Ctrl`, `Shift`), then the key, joined with `+`:
+`Ctrl+Shift+A`, `Shift+F5`, plain `A`. Writes parse strictly (known modifiers once each, then exactly one
+known key, otherwise `RangeError`, and the client sends nothing). Decoding checks the action table first,
+so `80 01 1b`, `80 01 06` and `80 01 19` stay Cut, Copy and Paste. Any other modifier bit or an
+unlisted usage reads as `Custom (80 mm kk)` and is never written.
+
+Evidence: the vendor app writes Ctrl+X, Ctrl+C and Ctrl+V as `80 01 1b`, `80 01 06`, `80 01 19`. Live
+tests on the mouse: `80 00 04` typed "a" and `80 02 04` typed "A" (Shift). Alt and Win were not tested
+and are not exposed. Frames: Back to A is data `03 80 00 04` (checksum `0x87`), Forward to Shift+A is
+`04 80 02 04` (checksum `0x8a`).
+
 Evidence: the factory map comes from a read after a reset; the write frames come from the vendor
 app's `WriteFile` calls (slot 4 to Back `01 00 01 04 04 20 08 00`, slot 1 to Volume up
 `01 00 01 04 01 90 e9 00`, slot 3 to Ctrl+C `01 00 01 04 03 80 01 06`). See `frames.json`.
 
 Driver: `readStatus` also reads `0x11` and sets `buttonMappings`, `buttonOptions` and
-`fixedButtons: ["Left"]`; a malformed map (not 18 bytes) rejects the read. `setButtonMapping(button,
+`fixedButtons: ["Left"]`, `buttonDefaults`, `shortcutKeys` and `shortcutModifiers`; a malformed map (not 18 bytes) rejects the read. `setButtonMapping(button,
 label)` refuses Left, writes only the one slot, requires the echo, then re-reads `0x11` and throws if
 the slot does not show the new label.
 

@@ -103,9 +103,13 @@ describe("aula client", () => {
   test("readStatus reports the button map, the options and the fixed Left button", async () => {
     const status = await new AulaSc580HidClient(mouse(), fast).readStatus();
     assert.deepEqual(status.buttonMappings, FACTORY_LABELS);
-    assert.equal(status.buttonOptions?.length, 18);
-    assert.equal(status.buttonOptions?.[0], "Left click");
+    assert.equal(status.buttonOptions?.length, 19);
+    assert.deepEqual(status.buttonOptions?.slice(0, 2), ["Default", "Left click"]);
     assert.deepEqual(status.fixedButtons, ["Left"]);
+    assert.deepEqual(status.buttonDefaults, FACTORY_LABELS);
+    assert.equal(status.shortcutKeys?.length, 63);
+    assert.deepEqual([status.shortcutKeys?.[0], status.shortcutKeys?.at(-1)], ["A", "Up arrow"]);
+    assert.deepEqual(status.shortcutModifiers, ["Ctrl", "Shift"]);
   });
 
   test("a malformed button map rejects readStatus immediately", async () => {
@@ -125,6 +129,41 @@ describe("aula client", () => {
     assert.deepEqual(device.sent.map((frame) => frame[0]), [0x01, 0x11]);
     assert.deepEqual(device.sent[0], aulaBuildFrame(0x01, [3, 0x90, 0xe9, 0x00]));
     assert.deepEqual(buttons.slice(9, 12), [0x90, 0xe9, 0x00]);
+  });
+
+  test("setButtonMapping Default restores each slot's factory code and confirms", async () => {
+    for (const slot of [1, 2, 3, 4, 5]) {
+      const buttons = [...FACTORY_MAP];
+      buttons.splice(slot * 3, 3, 0x70, 0x00, 0x00);
+      const device = mouse(undefined, undefined, buttons);
+      await new AulaSc580HidClient(device, fast).setButtonMapping(Object.keys(FACTORY_LABELS)[slot]!, "Default");
+      assert.deepEqual(device.sent.map((frame) => frame[0]), [0x01, 0x11]);
+      assert.deepEqual(buttons, FACTORY_MAP);
+    }
+  });
+
+  test("setButtonMapping writes shortcuts byte for byte and confirms them", async () => {
+    const buttons = [...FACTORY_MAP];
+    const device = mouse(undefined, undefined, buttons);
+    const client = new AulaSc580HidClient(device, fast);
+    await client.setButtonMapping("Back", "A");
+    await client.setButtonMapping("Forward", "Shift+A");
+    await client.setButtonMapping("Right", "Ctrl+X");
+    assert.deepEqual(device.sent[0], aulaBuildFrame(0x01, [3, 0x80, 0x00, 0x04]));
+    assert.equal(device.sent[0]![31], 0x87);
+    assert.deepEqual(device.sent[2], aulaBuildFrame(0x01, [4, 0x80, 0x02, 0x04]));
+    assert.equal(device.sent[2]![31], 0x8a);
+    assert.deepEqual(buttons.slice(3, 6), [0x80, 0x01, 0x1b]);
+    assert.equal((await client.readStatus()).buttonMappings?.Back, "A");
+  });
+
+  test("setButtonMapping rejects bad shortcuts without sending", async () => {
+    const device = mouse();
+    const client = new AulaSc580HidClient(device, fast);
+    for (const label of ["Alt+A", "Ctrl+Ctrl+A", "A+Ctrl", "Ctrl", "A+B", "Ctrl+Nope"]) {
+      await assert.rejects(client.setButtonMapping("Back", label), /not supported/);
+    }
+    assert.equal(device.sent.length, 0);
   });
 
   test("setButtonMapping refuses Left, bad buttons and unknown actions without sending", async () => {
