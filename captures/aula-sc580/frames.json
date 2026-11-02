@@ -1,0 +1,73 @@
+{
+  "device": "AULA SC580",
+  "interface": "HID usage page 0xFF02, report ID 0, 32-byte payload",
+  "source": "Vendor CBMouse app writes (debugger-captured) and passive read-only HID listening, receiver 0x089D:0x062F and cable 0x088D:0x062E. No serials or personal data.",
+  "frames": [
+    {
+      "name": "identify-request",
+      "dir": "host-to-device",
+      "note": "Vendor app write, 32-byte payload after report ID 0.",
+      "payload": "30 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+    },
+    {
+      "name": "identify-reply-battery",
+      "dir": "device-to-host",
+      "note": "Receiver, on battery. data[8]=0, data[9]=0x3e (62 percent).",
+      "payload": "30 00 01 0b 4d 31 33 37 01 16 11 aa 00 3e 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 f9"
+    },
+    {
+      "name": "identify-reply-cable",
+      "dir": "device-to-host",
+      "note": "USB cable, charging. data[8]=1, data[9]=0x64 is a fixed 100.",
+      "payload": "30 00 01 0b 4d 31 33 37 01 16 11 aa 01 64 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 20"
+    },
+    {
+      "name": "dpi-read-request",
+      "dir": "host-to-device",
+      "note": "Command 0x13.",
+      "payload": "13 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+    },
+    {
+      "name": "dpi-read-reply",
+      "dir": "device-to-host",
+      "note": "Header 0x16 then six 4-byte stages: 800 1900 2400 3200 6400 12000.",
+      "payload": "13 00 01 19 16 10 00 00 00 26 00 00 00 30 00 00 00 40 00 00 00 80 00 00 00 dc 00 00 00 00 00 18"
+    },
+    {
+      "name": "dpi-write",
+      "dir": "host-to-device",
+      "note": "Command 0x03, same table as the read reply with an offset byte in front.",
+      "payload": "03 00 01 1b 00 16 10 00 00 00 26 00 00 00 30 00 00 00 40 00 00 00 80 00 00 00 dc 00 00 00 00 18"
+    },
+    {
+      "name": "polling-read-request",
+      "dir": "host-to-device",
+      "note": "Command 0x12.",
+      "payload": "12 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+    },
+    {
+      "name": "polling-read-reply",
+      "dir": "device-to-host",
+      "note": "0x04 is 500 Hz.",
+      "payload": "12 00 01 01 04 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 04"
+    },
+    {
+      "name": "polling-write-1000hz",
+      "dir": "host-to-device",
+      "note": "Command 0x02; 0x08 is 1000 Hz.",
+      "payload": "02 00 01 01 08 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 08"
+    },
+    {
+      "name": "asleep-echo",
+      "dir": "device-to-host",
+      "note": "Status 2: the mouse is asleep and the receiver echoes the request; retry later.",
+      "payload": "30 02 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+    },
+    {
+      "name": "link-event",
+      "dir": "device-to-host",
+      "note": "Unsolicited command 0xd1; ignored by the driver.",
+      "payload": "d1 00 3d 00 01 11 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+    }
+  ]
+}

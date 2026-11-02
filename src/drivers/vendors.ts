@@ -198,6 +198,8 @@ export const VENDOR_ID = {
   mchoseA5Gen1: MCHOSE_A5_GEN1_VENDOR_ID,
   ksnakeUsb: 0xa8a4, // K-snake X11 wired
   ksnakeDongle: 0xa8a5, // K-snake X11 2.4 GHz dongle
+  aulaReceiver: 0x089d, // AULA SC580 2.4 GHz receiver
+  aulaUsb: 0x088d, // AULA SC580 wired
   microsoft: MICROSOFT_VENDOR_ID,
   dareu: DAREU_VENDOR_ID,
   redragon: REDRAGON_VENDOR_ID,
@@ -1003,6 +1005,9 @@ export const SUPPORTED_HID_FILTERS: HIDDeviceFilter[] = [
   // both the wired USB VID and the 2.4 GHz dongle VID.
   { vendorId: VENDOR_ID.ksnakeUsb, productId: 0x2255, usagePage: 0xff01, usage: 0x10 },
   { vendorId: VENDOR_ID.ksnakeDongle, productId: 0x2255, usagePage: 0xff01, usage: 0x10 },
+  // AULA SC580 settings channel on 0xFF02 (hidden from browsers; reached through OpenMouse Bridge).
+  { vendorId: VENDOR_ID.aulaReceiver, productId: 0x062f, usagePage: 0xff02 },
+  { vendorId: VENDOR_ID.aulaUsb, productId: 0x062e, usagePage: 0xff02 },
   ...AJAZZ_HID_FILTERS,
   ...MICROSOFT_HID_FILTERS,
   ...INCOTT_HID_FILTERS,

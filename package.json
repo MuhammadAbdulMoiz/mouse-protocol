@@ -190,6 +190,10 @@
       "types": "./dist/glorious-core2/index.d.ts",
       "import": "./dist/glorious-core2/index.js"
     },
+    "./aula": {
+      "types": "./dist/aula/index.d.ts",
+      "import": "./dist/aula/index.js"
+    },
     "./ksnake": {
       "types": "./dist/ksnake/index.d.ts",
       "import": "./dist/ksnake/index.js"
